@@ -1,0 +1,50 @@
+{
+	"name": "@nan0web/protocol",
+	"version": "1.0.0",
+	"description": "Minimalistic protocol for executing commands in a message‑driven environment of NaN•Web",
+	"type": "module",
+	"main": "src/index.js",
+	"types": "types/index.d.ts",
+	"files": [
+		"src/",
+		"types/",
+		"package.json",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"clean": "rm -rf .cache/ && rm -rf dist/",
+		"clean:modules": "rm -rf node_modules",
+		"precommit": "npm test",
+		"prepush": "npm test",
+		"prepare": "husky",
+		"prepublishOnly": "npm test && npm run build",
+		"playground": "node playground/main.js",
+		"release": "nan0release publish",
+		"test": "node --test",
+		"test:docs": "node --test src/README.md.js",
+		"test:release": "node --test \"releases/**/*.test.js\"",
+		"test:coverage": "node --experimental-test-coverage --test-coverage-include=\"src/**/*.js\" --test-coverage-exclude=\"src/**/*.test.js\" --test \"src/**/*.test.js\"",
+		"test:coverage:collect": "nan0test coverage",
+		"test:status": "nan0test status --hide-name"
+	},
+	"keywords": [
+		"nan0",
+		"data",
+		"types",
+		"utilities",
+		"object",
+		"array",
+		"validation",
+		"format",
+		"parser"
+	],
+	"author": "ЯRаСлав YaRaSLove <support@yaro.page>",
+	"license": "ISC",
+	"packageManager": "pnpm@10.11.0",
+	"devDependencies": {
+		"husky": "^9.1.7",
+		"@nan0web/release": "workspace:*",
+		"@nan0web/test": "workspace:*"
+	}
+}
