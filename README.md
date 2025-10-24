@@ -1,6 +1,8 @@
 # @nan0web/protocol
 
-<!-- %PACKAGE_STATUS% -->
+|[Status](https://github.com/nan0web/monorepo/blob/main/system.md#написання-сценаріїв)|Documentation|Test coverage|Features|Npm version|
+|---|---|---|---|---|
+ |🟢 `99.7%` |🧪 [English 🏴󠁧󠁢󠁥󠁮󠁧󠁿](https://github.com/nan0web/protocol/blob/main/README.md)<br />[Українською 🇺🇦](https://github.com/nan0web/protocol/blob/main/docs/uk/README.md) |🟢 `100.0%` |✅ d.ts 📜 system.md 🕹️ playground |— |
 
 Minimalistic protocol for executing commands in a message‑driven
 environment. It validates input, runs a command (class or function)
@@ -18,54 +20,45 @@ How to install with pnpm?
 pnpm add @nan0web/protocol
 ```
 
+How to install with yarn?
+```bash
+yarn add @nan0web/protocol
+```
+
 ## Basic usage – CommandProtocol
 
 The protocol accepts an `ExecutableCommand` subclass or a plain
-function. It records history of processed messages.
+function. It records a history of processed messages.
 
 How to create a CommandProtocol with a class command?
 ```js
-import { CommandProtocol, ExecutableCommand } from "@nan0web/protocol"
-
 class EchoCommand extends ExecutableCommand {
-/**
-	 * @param {import("@nan0web/co").CommandMessage} msg
-	 * @param {{db: DB}} _ctx
-	 * @returns {Promise<string>}
- */
-	async run(msg, _ctx) {
-		return msg.args.join(" ")
+	name = "Echo"
+	async run(msg) {
+		return msg.argv.join(" ")
 	}
 }
 
-const logger = { info: () => {} } // dummy logger
 const protocol = new CommandProtocol({
 	command: new EchoCommand(),
 	db: fs,
-	logger,
+	logger: new NoConsole(),
 })
 
-// Simulate an InputMessage
-const input = {
-	value: "echo hello world",
-	time: new Date(),
-}
+const input = { value: "Echo hello world", time: Date.now() }
+console.info(protocol.accepts(input)) // ← true
 
-// Accepts should be true for matching command name
+const out = await protocol.process(input)
+console.info(out)
+// { content: ["hello world"], error: null, meta: { source: "Echo" }, priority: 0 }
+console.info(protocol.history[0].message)
+// CommandMessage { body: "Echo hello world", head: {} }
+
 ```
-## Function command
 
-A plain function can also be used as a command.
-
-How to use a function as command?
+How to use a plain function as command?
 ```js
-import { CommandProtocol } from "@nan0web/protocol"
-
-const fn = (msg, { db }) => {
-	db.save = () => {} // dummy to silence type check
-	return `Received ${msg.args.length} args`
-}
-fn.name = "FnEcho"
+const fn = (msg) => msg.argv.map(v => v.toUpperCase())
 
 const protocol = new CommandProtocol({
 	command: fn,
@@ -73,40 +66,96 @@ const protocol = new CommandProtocol({
 	logger: new NoConsole(),
 })
 
-const input = { value: "FnEcho one two", time: new Date() }
+const input = { value: "fn hello planet", time: Date.now() }
+const out = await protocol.process(input)
+
+console.info(protocol.accepts(input)) // ← true
+console.info(out.content) // ← ["HELLO", "PLANET"]
+console.info(out.meta.source) // ← "fn"
 
 ```
-## Error handling
+## Object‑style command
 
-The protocol catches thrown errors and marks them as critical.
+Returning an object allows custom `content`, `priority` and `meta`.
 
-How does CommandProtocol handle errors?
+How to return an object from a command?
 ```js
-import { CommandProtocol } from "@nan0web/protocol"
-
-const errorCmd = async () => {
-	throw new Error("boom")
+function ObjCmd(msg) {
+	return {
+		content: ["custom", ...msg.argv],
+		priority: 7,
+		meta: { extra: true },
+	}
 }
-errorCmd.name = "BoomCmd"
 
 const protocol = new CommandProtocol({
-	command: errorCmd,
+	command: ObjCmd,
 	db: fs,
 	logger: new NoConsole(),
 })
 
-const input = { value: "BoomCmd test", time: new Date() }
+const input = { value: "ObjCmd a b", time: Date.now() }
+const out = await protocol.process(input)
+
+console.info(out.content) // ← ["custom", "a", "b"]
+console.info(out.priority) // ← 7
+console.info(out.meta) // ← { extra: true, source: "ObjCmd" }
+
+```
+## Fallback response
+
+When the command does not return a recognised shape.
+
+How does fallback look like?
+```js
+const fn = () => 12345
+
+const protocol = new CommandProtocol({
+	command: fn,
+	db: fs,
+	logger: new NoConsole(),
+})
+
+const input = { value: "fn any", time: Date.now() }
+const out = await protocol.process(input)
+
+console.info(out.content)
+// [ "Command executed.", "(no output data)" ]
+console.info(out.meta.source) // ← fn
+```
+## Error handling
+
+Thrown errors are caught and marked as critical (`priority: 100`).
+
+How are errors reported?
+```js
+const boom = () => {
+	throw new Error("boom")
+}
+
+const protocol = new CommandProtocol({
+	command: boom,
+	db: fs,
+	logger: new NoConsole(),
+})
+
+const input = { value: "boom test", time: Date.now() }
+const out = await protocol.process(input)
+console.info(out.content) // ← ["boom"]
+console.info(out.priority) // ← 100
+console.info(out.error instanceof Error) // ← true
+console.info(out.meta.source) // ← boom
 
 ```
 ## API surface
 
-Exported symbols from the package.
+Exported symbols must be present.
 
-All exported symbols should be present
+All exported classes should be available
 
-## Typescript declaration
+## TypeScript declarations
 
-Package should expose .d.ts files
+Package provides .d.ts files
 
 ## CLI Playground
 
@@ -114,18 +163,13 @@ Example command to run the playground script.
 
 How to run playground script?
 ```bash
-npm run playground
+npm run play
 ```
 
 ## Contributing
 
-How to contribute?
-```js
-const txt = await fs.loadDocument("CONTRIBUTING.md")
-```
+How to contribute? - [check here](./CONTRIBUTING.md)
+
 ## License
 
-License is ISC
-```js
-const txt = await fs.loadDocument("LICENSE")
-```
+How to license ISC? - [check here](./LICENSE)

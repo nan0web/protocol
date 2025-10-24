@@ -2,34 +2,30 @@ import { describe, it, before, beforeEach } from "node:test"
 import assert from "node:assert/strict"
 import FS from "@nan0web/db-fs"
 import { NoConsole } from "@nan0web/log"
-import {
-	DatasetParser,
-	DocsParser,
-} from "@nan0web/test"
-import {
-	CommandProtocol,
-	ExecutableCommand,
-} from "./index.js"
+import { DocsParser, DatasetParser, runSpawn } from "@nan0web/test"
+import { CommandProtocol, ExecutableCommand } from "./index.js"
+import { CommandMessage } from "@nan0web/co"
 
-let pkg
 const fs = new FS()
-let console = new NoConsole()
+let pkg
 
 before(async () => {
 	const doc = await fs.loadDocument("package.json", {})
 	pkg = doc || {}
 })
 
+let console = new NoConsole()
+
 beforeEach(() => {
 	console = new NoConsole()
 })
 
 /**
- * Core test suite which also serves as the source for README generation.
+ * Core test suite that also drives README generation.
  *
- * Each `it` block contains a JSDoc `@docs` comment that is extracted
- * to build the final `README.md`. Keeping the documentation
- * close to the code guarantees consistency.
+ * Block comments (`@docs`) inside each `it` become part of the final
+ * markdown. Keeping examples close to the code guarantees they stay
+ * up‑to‑date and executable.
  */
 function testRender() {
 	/**
@@ -52,6 +48,7 @@ function testRender() {
 		 */
 		assert.equal(pkg.name, "@nan0web/protocol")
 	})
+
 	/**
 	 * @docs
 	 */
@@ -63,63 +60,66 @@ function testRender() {
 		 */
 		assert.equal(pkg.name, "@nan0web/protocol")
 	})
+
+	/**
+	 * @docs
+	 */
+	it("How to install with yarn?", () => {
+		/**
+		 * ```bash
+		 * yarn add @nan0web/protocol
+		 * ```
+		 */
+		assert.equal(pkg.name, "@nan0web/protocol")
+	})
+
 	/**
 	 * @docs
 	 * ## Basic usage – CommandProtocol
 	 *
 	 * The protocol accepts an `ExecutableCommand` subclass or a plain
-	 * function. It records history of processed messages.
+	 * function. It records a history of processed messages.
 	 */
 	it("How to create a CommandProtocol with a class command?", async () => {
-		//import { CommandProtocol, ExecutableCommand } from "@nan0web/protocol"
-
 		class EchoCommand extends ExecutableCommand {
-			/**
-			 * @param {import("@nan0web/co").CommandMessage} msg
-			 * @param {{db: DB}} _ctx
-			 * @returns {Promise<string>}
-			 */
-			async run(msg, _ctx) {
-				return msg.args.join(" ")
+			name = "Echo"
+			async run(msg) {
+				return msg.argv.join(" ")
 			}
 		}
 
-		const logger = { info: () => {} } // dummy logger
 		const protocol = new CommandProtocol({
 			command: new EchoCommand(),
 			db: fs,
-			logger,
+			logger: new NoConsole(),
 		})
 
-		// Simulate an InputMessage
-		const input = {
-			value: "echo hello world",
-			time: new Date(),
-		}
+		const input = { value: "Echo hello world", time: Date.now() }
+		console.info(protocol.accepts(input)) // ← true
 
-		// Accepts should be true for matching command name
-		assert.ok(protocol.accepts(input))
+		const out = await protocol.process(input)
+		console.info(out)
+		// { content: ["hello world"], error: null, meta: { source: "Echo" }, priority: 0 }
+		console.info(protocol.history[0].message)
+		// CommandMessage { body: "Echo hello world", head: {} }
 
-		const output = await protocol.process(input)
-
-		assert.deepStrictEqual(output.content, ["hello", "world"])
-		assert.equal(output.meta.source, "EchoCommand")
-		assert.equal(protocol.history.length, 1)
+		assert.equal(console.output()[0][1], true)
+		assert.deepStrictEqual(console.output()[1][1], {
+			content: ["hello world"],
+			error: null,
+			meta: { source: "Echo" },
+			priority: 0
+		})
+		assert.deepStrictEqual(console.output()[2][1], CommandMessage.from({
+			body: "Echo hello world",
+		}))
 	})
+
 	/**
 	 * @docs
-	 * ## Function command
-	 *
-	 * A plain function can also be used as a command.
 	 */
-	it("How to use a function as command?", async () => {
-		//import { CommandProtocol } from "@nan0web/protocol"
-
-		const fn = (msg, { db }) => {
-			db.save = () => {} // dummy to silence type check
-			return `Received ${msg.args.length} args`
-		}
-		fn.name = "FnEcho"
+	it("How to use a plain function as command?", async () => {
+		const fn = (msg) => msg.argv.map(v => v.toUpperCase())
 
 		const protocol = new CommandProtocol({
 			command: fn,
@@ -127,62 +127,128 @@ function testRender() {
 			logger: new NoConsole(),
 		})
 
-		const input = { value: "FnEcho one two", time: new Date() }
-
-		assert.ok(protocol.accepts(input))
-
+		const input = { value: "fn hello planet", time: Date.now() }
 		const out = await protocol.process(input)
 
-		assert.deepStrictEqual(out.content, ["Received 2 args"])
-		assert.equal(out.meta.source, "FnEcho")
+		console.info(protocol.accepts(input)) // ← true
+		console.info(out.content) // ← ["HELLO", "PLANET"]
+		console.info(out.meta.source) // ← "fn"
+
+		assert.equal(console.output()[0][1], true)
+		assert.deepStrictEqual(console.output()[1][1], ["HELLO", "PLANET"])
+		assert.strictEqual(console.output()[2][1], "fn")
 	})
+
 	/**
 	 * @docs
-	 * ## Error handling
+	 * ## Object‑style command
 	 *
-	 * The protocol catches thrown errors and marks them as critical.
+	 * Returning an object allows custom `content`, `priority` and `meta`.
 	 */
-	it("How does CommandProtocol handle errors?", async () => {
-		//import { CommandProtocol } from "@nan0web/protocol"
-
-		const errorCmd = async () => {
-			throw new Error("boom")
+	it("How to return an object from a command?", async () => {
+		function ObjCmd(msg) {
+			return {
+				content: ["custom", ...msg.argv],
+				priority: 7,
+				meta: { extra: true },
+			}
 		}
-		errorCmd.name = "BoomCmd"
 
 		const protocol = new CommandProtocol({
-			command: errorCmd,
+			command: ObjCmd,
 			db: fs,
 			logger: new NoConsole(),
 		})
 
-		const input = { value: "BoomCmd test", time: new Date() }
+		const input = { value: "ObjCmd a b", time: Date.now() }
+		const out = await protocol.process(input)
 
-		assert.ok(protocol.accepts(input))
+		console.info(out.content) // ← ["custom", "a", "b"]
+		console.info(out.priority) // ← 7
+		console.info(out.meta) // ← { extra: true, source: "ObjCmd" }
 
-		const res = await protocol.process(input)
-
-		assert.deepStrictEqual(res.content, ["boom"])
-		assert.equal(res.priority, 100) // critical
-		assert.ok(res.error instanceof Error)
+		assert.deepStrictEqual(console.output()[0][1], ["custom", "a", "b"])
+		assert.strictEqual(console.output()[1][1], 7)
+		assert.deepStrictEqual(console.output()[2][1], { extra: true, source: "ObjCmd" })
 	})
+
+	/**
+	 * @docs
+	 * ## Fallback response
+	 *
+	 * When the command does not return a recognised shape.
+	 */
+	it("How does fallback look like?", async () => {
+		const fn = () => 12345
+
+		const protocol = new CommandProtocol({
+			command: fn,
+			db: fs,
+			logger: new NoConsole(),
+		})
+
+		const input = { value: "fn any", time: Date.now() }
+		const out = await protocol.process(input)
+
+		console.info(out.content)
+		// [ "Command executed.", "(no output data)" ]
+		console.info(out.meta.source) // ← fn
+		assert.deepStrictEqual(console.output()[0][1], [
+			"Command executed.",
+			"(no output data)",
+		])
+		assert.strictEqual(console.output()[1][1], "fn")
+	})
+
+	/**
+	 * @docs
+	 * ## Error handling
+	 *
+	 * Thrown errors are caught and marked as critical (`priority: 100`).
+	 */
+	it("How are errors reported?", async () => {
+		const boom = () => {
+			throw new Error("boom")
+		}
+
+		const protocol = new CommandProtocol({
+			command: boom,
+			db: fs,
+			logger: new NoConsole(),
+		})
+
+		const input = { value: "boom test", time: Date.now() }
+		const out = await protocol.process(input)
+		console.info(out.content) // ← ["boom"]
+		console.info(out.priority) // ← 100
+		console.info(out.error instanceof Error) // ← true
+		console.info(out.meta.source) // ← boom
+
+		assert.deepStrictEqual(console.output()[0][1], ["boom"])
+		assert.strictEqual(console.output()[1][1], 100)
+		assert.ok(console.output()[2][1])
+		assert.strictEqual(console.output()[3][1], "boom")
+	})
+
 	/**
 	 * @docs
 	 * ## API surface
 	 *
-	 * Exported symbols from the package.
+	 * Exported symbols must be present.
 	 */
-	it("All exported symbols should be present", () => {
+	it("All exported classes should be available", () => {
 		assert.ok(CommandProtocol)
 		assert.ok(ExecutableCommand)
 	})
+
 	/**
 	 * @docs
-	 * ## Typescript declaration
+	 * ## TypeScript declarations
 	 */
-	it("Package should expose .d.ts files", () => {
+	it("Package provides .d.ts files", () => {
 		assert.equal(pkg.types, "types/index.d.ts")
 	})
+
 	/**
 	 * @docs
 	 * ## CLI Playground
@@ -192,26 +258,36 @@ function testRender() {
 	it("How to run playground script?", async () => {
 		/**
 		 * ```bash
-		 * npm run playground
+		 * npm run play
 		 * ```
 		 */
-		assert.ok(typeof pkg.scripts?.playground === "string")
+		assert.ok(typeof pkg.scripts?.play === "string")
+		const response = await runSpawn("node", ["-e", "console.log('ok')"])
+		assert.strictEqual(response.code, 0)
+		assert.ok(response.text.includes("ok"))
 	})
+
 	/**
 	 * @docs
 	 * ## Contributing
 	 */
-	it("How to contribute?", async () => {
-		const txt = await fs.loadDocument("CONTRIBUTING.md")
-		assert.ok(String(txt).includes("# Contributing"))
+	it("How to contribute? - [check here](./CONTRIBUTING.md)", async () => {
+		assert.equal(pkg.scripts?.precommit, "npm test")
+		assert.equal(pkg.scripts?.prepush, "npm test")
+		assert.equal(pkg.scripts?.prepare, "husky")
+		const text = await fs.loadDocument("CONTRIBUTING.md")
+		const str = String(text)
+		assert.ok(str.includes("# Contributing"))
 	})
+
 	/**
 	 * @docs
 	 * ## License
 	 */
-	it("License is ISC", async () => {
-		const txt = await fs.loadDocument("LICENSE")
-		assert.ok(String(txt).includes("ISC"))
+	it("How to license ISC? - [check here](./LICENSE)", async () => {
+		/** @docs */
+		const text = await fs.loadDocument("LICENSE")
+		assert.ok(String(text).includes("ISC"))
 	})
 }
 
@@ -221,9 +297,8 @@ describe("README.md testing", testRender)
 
 describe("Rendering README.md", async () => {
 	let text = ""
-	const parser = new DocsParser()
 	const format = new Intl.NumberFormat("en-US").format
-
+	const parser = new DocsParser()
 	text = String(parser.decode(testRender))
 	await fs.saveDocument("README.md", text)
 	const dataset = DatasetParser.parse(text, pkg.name)

@@ -6,10 +6,9 @@
 	"main": "src/index.js",
 	"types": "types/index.d.ts",
 	"files": [
-		"src/",
-		"types/",
-		"package.json",
-		"README.md"
+		"src/**/*.js",
+		"!src/**/*.test.js",
+		"types/**/*.d.ts"
 	],
 	"scripts": {
 		"build": "tsc",
@@ -19,7 +18,7 @@
 		"prepush": "npm test",
 		"prepare": "husky",
 		"prepublishOnly": "npm test && npm run build",
-		"playground": "node playground/main.js",
+		"play": "node play/main.js",
 		"release": "nan0release publish",
 		"test": "node --test",
 		"test:docs": "node --test src/README.md.js",
@@ -43,8 +42,13 @@
 	"license": "ISC",
 	"packageManager": "pnpm@10.11.0",
 	"devDependencies": {
-		"husky": "^9.1.7",
-		"@nan0web/release": "workspace:*",
-		"@nan0web/test": "workspace:*"
+		"@nan0web/log": "^1.0.0",
+		"@nan0web/release": "^1.0.1",
+		"@nan0web/test": "^1.0.2",
+		"@nan0web/ui-cli": "^1.0.0",
+		"husky": "^9.1.7"
+	},
+	"dependencies": {
+		"@nan0web/interface": "^1.0.1"
 	}
 }
