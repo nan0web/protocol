@@ -1,6 +1,6 @@
 {
 	"name": "@nan0web/protocol",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"description": "Minimalistic protocol for executing commands in a message‑driven environment of NaN•Web",
 	"type": "module",
 	"main": "src/index.js",
