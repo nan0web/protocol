@@ -20,12 +20,13 @@
 		"prepublishOnly": "npm test && npm run build",
 		"play": "node play/main.js",
 		"release": "nan0release publish",
-		"test": "node --test",
+		"test": "node --test --test-timeout=3333 \"src/**/*.test.js\"",
 		"test:docs": "node --test src/README.md.js",
 		"test:release": "node --test \"releases/**/*.test.js\"",
 		"test:coverage": "node --experimental-test-coverage --test-coverage-include=\"src/**/*.js\" --test-coverage-exclude=\"src/**/*.test.js\" --test \"src/**/*.test.js\"",
 		"test:coverage:collect": "nan0test coverage",
-		"test:status": "nan0test status --hide-name"
+		"test:status": "nan0test status --hide-name",
+		"test:all": "npm run test && npm run test:docs && npm run test:release && npm run build"
 	},
 	"keywords": [
 		"nan0",

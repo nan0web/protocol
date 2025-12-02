@@ -1,5 +1,5 @@
-import { CommandMessage } from '@nan0web/co'
 import DB from "@nan0web/db"
+import { Message } from "@nan0web/co"
 import ExecutableCommand from './ExecutableCommand.js'
 
 /** @typedef {import("@nan0web/log").Logger} Logger */
@@ -10,17 +10,25 @@ import ExecutableCommand from './ExecutableCommand.js'
  * Command protocol.
  *
  * Accepts an {@link InputMessage}, validates the command name,
- * runs the configured command (class or plain function) and returns
+ * runs the configured command (class or function) and returns
  * an {@link OutputMessage}.
  */
 export default class CommandProtocol {
+	/** @type {ExecutableCommand | Function} */
+	command
+	/** @type {DB} */
+	db
+	/** @type {Logger} */
+	logger
+	/** @type {Array<{ input: InputMessage, message: Message, time: number }>} */
+	history = []
 	/**
 	 * Create a new protocol instance.
 	 *
 	 * @param {object} params
-	 * @param {ExecutableCommand|Function} params.command   Command implementation (class instance or function).
+	 * @param {ExecutableCommand | Function} params.command   Command implementation (class instance or function).
 	 * @param {DB} params.db                             Database accessor.
-	 * @param {Logger} [params.logger]                   Logger (optional – defaults to a new {@link Logger} instance).
+	 * @param {Logger} [params.logger]                  Logger (optional – defaults to a new {@link Logger} instance).
 	 *
 	 * @throws {Error} If any of the required parameters are missing.
 	 */
@@ -50,7 +58,7 @@ export default class CommandProtocol {
 	 * Process the incoming {@link InputMessage}.
 	 *
 	 * Steps:
-	 * 1. Parse the raw text into a {@link CommandMessage}.
+	 * 1. Parse the raw text into a {@link Message}.
 	 * 2. Record the operation in the history.
 	 * 3. Execute the command (class instance or plain function).
 	 * 4. Normalise the result into an {@link OutputMessage}.
@@ -63,30 +71,20 @@ export default class CommandProtocol {
 			// 1. Tokenise the raw input.
 			const argv = String(input.value || '').trim().split(/\s+/)
 
-			/** @type {CommandMessage} */
-			const rawMessage = CommandMessage.parse(argv)
-
-			// Build a lightweight message where `args` are the arguments **without** the command name.
-			const cmdMessage = CommandMessage.from({
-				...rawMessage,
-				args: rawMessage.argv // rawMessage.argv already excludes the command name
-			})
+			/** @type {Message}} */
+			const message = Message.from(input.value)
 
 			// 2. Store the operation in the history.
-			this.history.push({
-				input,
-				message: cmdMessage,
-				time: Date.now()
-			})
+			this.history.push({ input, message, time: Date.now() })
 
 			// 3. Run the command.
 			let result
 			if (this.command instanceof ExecutableCommand) {
-				result = await this.command.run(cmdMessage, { db: this.db })
+				result = await this.command.run(message, { db: this.db })
 			} else {
 				/** @type {Function} */
 				const fn = this.command
-				result = await fn(cmdMessage, { db: this.db })
+				result = await fn(message, { db: this.db })
 			}
 
 			const sourceName =
@@ -145,3 +143,4 @@ export default class CommandProtocol {
 		}
 	}
 }
+

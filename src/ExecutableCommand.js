@@ -1,17 +1,23 @@
-import { Command, CommandMessage } from "@nan0web/co"
+import { Message } from "@nan0web/co"
 
 /**
  * Base class for executable commands.
  *
  * Sub‑classes must implement {@link ExecutableCommand.run}.
- *
- * @extends Command
  */
-export default class ExecutableCommand extends Command {
+export default class ExecutableCommand {
+	/** @type {string} */
+	name = ""
+	constructor(input = {}) {
+		const {
+			name = this.name
+		} = input
+		this.name = String(name)
+	}
 	/**
 	 * Execute the command.
 	 *
-	 * @param {CommandMessage} msg   Parsed command message; `msg.args` contains the arguments.
+	 * @param {Message} msg   Parsed command message; `msg.args` contains the arguments.
 	 * @param {object} [context={}]  Optional execution context (e.g., `{ db }`).
 	 *
 	 * @returns {Promise<any>} The command result.
